@@ -16,37 +16,8 @@ api_uid = readRegistry("Environment", hive = "HCU")$email_address
 api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
 
-# Connect to database
-con = dbConnect(
-  odbc(), 
-  "QuickBase via QuNect user",
-  timeout = 10
-)
-
-# Query database 
-requests = dbGetQuery(
-  con,
-  str_c(
-    "select *
-    from OSSE_Data_Request_Portal__Requests_bm6u3xrcx"
-  )
-) %>% 
-  as_tibble()
-
-status = dbGetQuery(
-  con,
-  str_c(
-    "select *
-    from OSSE_Data_Request_Portal__Status_bm6u3yxcu"
-  )
-) %>% 
-  as_tibble()
-
-break()
-
-
-
-# Get DB table names and IDs? 
+# Get DB table names and IDs from API
+## Get a list of DBs I have access to 
 granted_dbs = GET(
   str_c(
     url,
@@ -55,6 +26,8 @@ granted_dbs = GET(
   )
 ) %>% 
   content()
+
+## Create a tibble and extract names and IDs from API
 db = tibble(
   db_name = xml_nodes(granted_dbs, "dbname") %>% 
     str_flatten() %>% 
@@ -64,21 +37,66 @@ db = tibble(
     str_flatten() %>% 
     str_split("</dbid><dbid>") %>% 
     unlist() 
+) %>% 
+  ## Concatenate to match QuNect naming conventions
+  mutate(
+    db_name = str_replace_all(db_name, "</dbname>", "") %>% 
+      str_replace_all("<dbname>", "") %>% 
+      str_replace_all("[ :]", "_"),
+    db_id = str_replace_all(db_id, "</dbid>", "") %>% 
+      str_replace_all("<dbid>", ""),
+    db_name_id = str_c(db_name, db_id, sep  = "_")
+  ) 
+
+# Connect to database
+con = dbConnect(
+  odbc(), 
+  "QuickBase via QuNect user",
+  timeout = 10
 )
 
-# Query the tables from the API
-GET(
+# Query database 
+## Requests table
+requests = dbGetQuery(
+  con,
   str_c(
-    str_replace(url, "main", "bm6u3xrcx"),
-    "?a", "=", "API_DoQuery", # API_DoQuery function,
-    "&", "query", "=", "{1.HAS.'a'}", # send query criteria
-    # "&", "ticket", "=", auth_ticket, # use authentication ticket to prove who you are
-    "&", "apptoken", "=", api_app,
-    "&", "usertoken", "=", api_key # use API key instead?
+    "select *
+    from ",
+    db$db_name_id[str_ends(db$db_name, "__Requests")]
   )
 ) %>% 
-  content() %>% 
-  View()
+  as_tibble() %>% 
+  janitor::clean_names()
+
+## Status table
+status = dbGetQuery(
+  con,
+  str_c(
+    "select *
+    from ",
+    db$db_name_id[str_detect(db$db_name, "Status")]
+  )
+) %>% 
+  as_tibble() %>% 
+  janitor::clean_names()
+
+## Filter to get a list of status updates 
+arrange(status, data_request_id, desc(date_modified)) %>% 
+  group_by(status_record_id) %>%
+  summarize_at(
+    vars(date_modified, status, status_notes, requester_full_name, 
+         request_contact_email),
+    "first"
+  ) %>% 
+  ungroup() %>% 
+  left_join(
+    select(requests, record_id, requesting_organization, first_name, 
+           desired_delivery_date, osse_due_date, communications_log),
+    by = c("status_record_id" = "record_id")
+  ) %>% 
+  filter(!status %in% c("Closed", "Complete") & 
+           str_detect(requesting_organization, "OSSE") & 
+           filter(now() - date_modified < 14))
 
 # Send email update
 requester = api_uid
@@ -90,3 +108,5 @@ send_mail(
   username = NA,
   password = NA
 )
+
+## Can I send a list of new data requests to Smartsheet Front Office review sheet? 
