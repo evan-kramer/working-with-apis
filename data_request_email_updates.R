@@ -24,7 +24,7 @@ con = dbConnect(
 )
 
 # Query database 
-dbGetQuery(
+requests = dbGetQuery(
   con,
   str_c(
     "select *
@@ -33,55 +33,40 @@ dbGetQuery(
 ) %>% 
   as_tibble()
 
+status = dbGetQuery(
+  con,
+  str_c(
+    "select *
+    from OSSE_Data_Request_Portal__Status_bm6u3yxcu"
+  )
+) %>% 
+  as_tibble()
+
 break()
 
-# Authenticate
-auth = GET(
-  str_c(
-    url, # Main url to access the data
-    "?a", "=", "API_Authenticate", # function to use, API_Authenticate here
-    "&", "username", "=", api_uid, # user ID
-    "&", "password", "=", api_pwd, # password
-    "&", "hours", "=", 24 # string to reference hours of authentication
-  )
-) %>%
-  content(as = "text")
-auth_ticket = str_sub(
-  auth, 
-  str_locate(auth, "<ticket>")[2] + 1, 
-  str_locate(auth, "</ticket>")[1] - 1
-)
 
-# Get DB table names? 
-GET(
+
+# Get DB table names and IDs? 
+granted_dbs = GET(
   str_c(
     url,
     "?a", "=", "API_GrantedDBs", # API_GrantedDBs function,
-    "&", "ticket", "=", auth_ticket # use authentication ticket to prove who you are
-    # "&", "usertoken", "=", api_key, # use API key instead? 
+    "&", "usertoken", "=", api_key # use API user key to authenticate (could also use ticket)
   )
 ) %>% 
-  content() %>% 
-  # xml_attrs("database")
-  xml_nodes("dbname") %>%
-  # xml_nodes("dbid") %>% 
-  .[61:80]
+  content()
+db = tibble(
+  db_name = xml_nodes(granted_dbs, "dbname") %>% 
+    str_flatten() %>% 
+    str_split("</dbname><dbname>") %>% 
+    unlist(),
+  db_id = xml_nodes(granted_dbs, "dbid") %>% 
+    str_flatten() %>% 
+    str_split("</dbid><dbid>") %>% 
+    unlist() 
+)
 
-# Get field attributes
-GET(
-  str_c(
-    str_replace(url, "main", "bm6u3xrcx"),
-    "?a", "=", "API_GetFieldProperties",
-    "&", "usertoken", "=", api_key,
-    "&", "apptoken", "=", api_app,
-    "&", "ticket", "=", auth_ticket,
-    "&", "fid", "=", 1
-  )
-) %>% 
-  content() %>% 
-  print()
-
-# Query the tables
+# Query the tables from the API
 GET(
   str_c(
     str_replace(url, "main", "bm6u3xrcx"),
@@ -92,30 +77,10 @@ GET(
     "&", "usertoken", "=", api_key # use API key instead?
   )
 ) %>% 
-  content()
+  content() %>% 
+  View()
 
-
-break()
-
-# Get all sheets
-GET(
-  url = "https://octo.quickbase.com/db/bm6u3xrcx?a=q&qid=16",
-  authenticate(
-    user = "evan.kramer@dc.gov",
-    password = api_pwd
-  ),
-  add_headers(
-    Authorization = str_c("Bearer ", api_key)
-  )
-) %>% 
-  class()
-  content() 
-
-# Get data from a table
-
-
-
-# Send email
+# Send email update
 requester = api_uid
 send_mail(
   mail_from = api_uid, # send from osse.datasharing@dc.gov?
@@ -125,5 +90,3 @@ send_mail(
   username = NA,
   password = NA
 )
-
-# DR 
