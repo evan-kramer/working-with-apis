@@ -8,10 +8,32 @@ library(lubridate)
 library(httr)
 library(xml2)
 library(rvest)
+library(odbc)
+library(DBI)
 api_key = readRegistry("Environment", hive = "HCU")$quickbase_api_key
 api_pwd = readRegistry("Environment", hive = "HCU")$quickbase_pwd
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
+api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
+
+# Connect to database
+con = dbConnect(
+  odbc(), 
+  "QuickBase via QuNect user",
+  timeout = 10
+)
+
+# Query database 
+dbGetQuery(
+  con,
+  str_c(
+    "select *
+    from OSSE_Data_Request_Portal__Requests_bm6u3xrcx"
+  )
+) %>% 
+  as_tibble()
+
+break()
 
 # Authenticate
 auth = GET(
@@ -30,7 +52,7 @@ auth_ticket = str_sub(
   str_locate(auth, "</ticket>")[1] - 1
 )
 
-# Get DB names? 
+# Get DB table names? 
 GET(
   str_c(
     url,
@@ -41,22 +63,36 @@ GET(
 ) %>% 
   content() %>% 
   # xml_attrs("database")
-  # xml_nodes("dbname") %>% 
-  xml_nodes("dbid") %>% 
+  xml_nodes("dbname") %>%
+  # xml_nodes("dbid") %>% 
   .[61:80]
 
 # Get field attributes
+GET(
+  str_c(
+    str_replace(url, "main", "bm6u3xrcx"),
+    "?a", "=", "API_GetFieldProperties",
+    "&", "usertoken", "=", api_key,
+    "&", "apptoken", "=", api_app,
+    "&", "ticket", "=", auth_ticket,
+    "&", "fid", "=", 1
+  )
+) %>% 
+  content() %>% 
+  print()
 
 # Query the tables
 GET(
   str_c(
     str_replace(url, "main", "bm6u3xrcx"),
     "?a", "=", "API_DoQuery", # API_DoQuery function,
-    "&", "query", "=", "bm6u3xrcx", # Get DB ID using calls above
-    "&", "ticket", "=", auth_ticket # use authentication ticket to prove who you are
-    # "&", "usertoken", "=", api_key, # use API key instead? 
+    "&", "query", "=", "{1.HAS.'a'}", # send query criteria
+    # "&", "ticket", "=", auth_ticket, # use authentication ticket to prove who you are
+    "&", "apptoken", "=", api_app,
+    "&", "usertoken", "=", api_key # use API key instead?
   )
-)
+) %>% 
+  content()
 
 
 break()

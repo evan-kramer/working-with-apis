@@ -1,0 +1,36 @@
+---
+title: "Data Request Memo"
+author: "Division of Data, Assessment, and Research"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(tidyverse)
+library(lubridate)
+library(httr)
+library(xml2)
+library(rvest)
+file_path = NA
+```
+
+***
+__TO__: Hanseul Kang, Superintendent
+
+__THROUGH__: Rebecca Lamury, Assistant Superintendent, DAR
+
+__FROM__: Evan Kramer, Director of Research, Analysis, and Reporting, DAR and `r print("DRM")`
+
+__RE__: Requesting Approval for Data Request to be Fulfilled
+
+__DATE__: `r str_c(month(now(), label = T, abbr = F), " ", day(now()), ", ", year(now()))`
+
+***
+
+Please review and let me know if you can approve the following data request fulfillment.
+
+- The data were requested by: `r print("requester")`
+- The end recipient of the data is: `r print("recipient")`
+- The data were requested on: `r print("request_date")`
+- The stated purpose of the data request is: `print("purpose")`
+- The data we propose to release are: `r print("kable")`
