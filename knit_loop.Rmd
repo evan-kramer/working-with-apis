@@ -1,25 +1,21 @@
-# Testing Smartsheet API
-# Evan Kramer
-
-# Attach packages
+```{r setup, include = F}
 options(java.parameters = "-Xmx16G")
+knitr::opts_chunk$set(echo = F)
 library(tidyverse)
 library(lubridate)
-library(httr)
-library(xml2)
-library(rvest)
+library(blastula)
 library(odbc)
 library(DBI)
-library(curl)
-library(blastula)
+library(httr)
+library(rvest)
+
 api_key = readRegistry("Environment", hive = "HCU")$quickbase_api_key
 api_pwd = readRegistry("Environment", hive = "HCU")$quickbase_pwd
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
 api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
+r = 1
 
-# Get DB table names and IDs from API
-## Get a list of DBs I have access to 
 granted_dbs = GET(
   str_c(
     url,
@@ -99,20 +95,20 @@ email_data = arrange(status, request_id, desc(date_modified)) %>%
   filter(!status %in% c("Closed", "Complete") & 
            str_detect(requesting_organization, "OSSE"))
 
-# Send email update
-for(row in 1:nrow(email_data)) {
-  render_email(
-    input = "C:/Users/evan.kramer/Documents/working-with-apis/knit_loop.Rmd"
-  )
-}
+```
 
-## Alternative method
-send_mail(
-  mail_from = api_uid,
-  mail_rcpt = api_uid,
-  message = NA,
-  smtp_server = "smtps://smtp.office365.com:587",
-  use_ssl = "force"
-)
+---
+output: blastula_email
+params: 
+  row: `r row`
+---
 
-## Can I send a list of new data requests to Smartsheet Front Office review sheet? 
+Hi `r email_data$first_name[row]`,
+
+I am writing with an update on your data request. The status of this request is listed as `r email_data$status[row]` as of `r email_data$date_modified[row]`.
+
+Please let me know what questions or feedback you have.
+
+Regards,
+
+Evan
