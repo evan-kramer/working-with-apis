@@ -100,19 +100,38 @@ email_data = arrange(status, request_id, desc(date_modified)) %>%
            str_detect(requesting_organization, "OSSE"))
 
 # Send email update
-for(row in 1:nrow(email_data)) {
-  render_email(
-    input = "C:/Users/evan.kramer/Documents/working-with-apis/knit_loop.Rmd"
+## Set up message body template
+message_template = 
+'From: <evan.kramer@dc.gov>
+To: <evan.kramer@dc.gov>
+Subject: Data Request Status Update
+
+Dear <<first_name>>,
+
+I am writing to update you on the status of request <<request_id>>. This request is listed as <<status>> and was last updated on <<date_modified>>.
+
+Please reach out with any questions or feedback.
+
+Thanks,
+Evan'
+
+## Loop through all rows
+# for(r in 1:nrow(email_data)) {
+for(r in 1:5) {
+  # Adjust body for all rows
+  message = str_replace_all(message_template, "<<first_name>>", email_data$first_name[r]) %>% 
+    str_replace_all("<<request_id>>", as.character(email_data$request_id[r])) %>% 
+    str_replace_all("<<status>>", email_data$status[r]) %>% 
+    str_replace_all("<<date_modified>>", as.character(email_data$date_modified[r]))
+  
+  # Send mail via SMTP
+  send_mail(
+    mail_from = api_uid,
+    mail_rcpt = api_uid, # change to email_data$contact_email[r] when ready
+    message = message,
+    smtp_server = "smtp://smtp.office365.com:587",
+    username = api_uid,
+    password = api_pwd,
+    use_ssl = "force"
   )
 }
-
-## Alternative method
-send_mail(
-  mail_from = api_uid,
-  mail_rcpt = api_uid,
-  message = NA,
-  smtp_server = "smtps://smtp.office365.com:587",
-  use_ssl = "force"
-)
-
-## Can I send a list of new data requests to Smartsheet Front Office review sheet? 
