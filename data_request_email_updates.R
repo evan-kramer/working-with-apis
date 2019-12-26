@@ -10,6 +10,7 @@ library(xml2)
 library(rvest)
 library(odbc)
 library(DBI)
+library(curl)
 api_key = readRegistry("Environment", hive = "HCU")$quickbase_api_key
 api_pwd = readRegistry("Environment", hive = "HCU")$quickbase_pwd
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
@@ -81,8 +82,8 @@ status = dbGetQuery(
   janitor::clean_names()
 
 ## Filter to get a list of status updates 
-arrange(status, data_request_id, desc(date_modified)) %>% 
-  group_by(status_record_id) %>%
+email_data = arrange(status, request_id, desc(date_modified)) %>% 
+  group_by(request_id) %>%
   summarize_at(
     vars(date_modified, status, status_notes, requester_full_name, 
          request_contact_email),
@@ -92,21 +93,37 @@ arrange(status, data_request_id, desc(date_modified)) %>%
   left_join(
     select(requests, record_id, requesting_organization, first_name, 
            desired_delivery_date, osse_due_date, communications_log),
-    by = c("status_record_id" = "record_id")
+    by = c("request_id" = "record_id")
   ) %>% 
   filter(!status %in% c("Closed", "Complete") & 
-           str_detect(requesting_organization, "OSSE") & 
-           filter(now() - date_modified < 14))
+           str_detect(requesting_organization, "OSSE"))
 
 # Send email update
-requester = api_uid
+
+message = str_c(
+  'From: "OSSE Data Request Portal" <', api_uid, '>
+  To: "Recipient" <', requester, '>
+  Subject: Data Request #', email_data$request_id[1], '
+  
+  Hi ', email_data$first_name[1], '
+  
+  I am writing with an update on data request #', email_data$request_id[1], '. The status of this request is listed as ', email_data$status[1],', and it was last updated on, ', email_data$date_modified[1], '.
+  
+  Please reach out with any questions or feedback.
+  
+  Regards,
+  Evan'
+)
+
 send_mail(
   mail_from = api_uid, # send from osse.datasharing@dc.gov?
   mail_rcpt = requester,
-  message = str_c("This email was sent to ", requester, " as a test."), # format?
-  smtp_server = NA, 
-  username = NA,
-  password = NA
+  message = message,
+  smtp_server = "smtp://smtp.office365.com:587",
+  username = api_uid,
+  password = api_pwd,
+  use_ssl = T,
+  verbose = F # whether you want to display output
 )
 
 ## Can I send a list of new data requests to Smartsheet Front Office review sheet? 
