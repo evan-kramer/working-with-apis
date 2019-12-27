@@ -8,7 +8,8 @@ library(lubridate)
 library(httr)
 api_key = readRegistry("Environment", hive = "HCU")$smartsheet_api_key
 api_pwd = readRegistry("Environment", hive = "HCU")$smartsheet_pwd
-url = "https://app.smartsheet.com/sheets/Q6pPgXVCvM43R2X789x3JhXXGPrXCX83F47h9p71"
+
+
 
 # Can I send a list of new data requests to Smartsheet Front Office review sheet? 
 con = dbConnect(
@@ -16,6 +17,8 @@ con = dbConnect(
   "QuickBase via QuNect user",
   timeout = 10
 )
+
+
 
 granted_dbs = GET(
   str_c(
