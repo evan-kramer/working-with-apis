@@ -1,11 +1,8 @@
----
-title: "Data Request Memo"
-author: "Division of Data, Assessment, and Research"
-output: word_document
----
+# Data Request Memo
+# Evan Kramer
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = F)
+# Attach packages
+options(java.parameters = "-Xmx16G")
 library(tidyverse)
 library(lubridate)
 library(httr)
@@ -21,6 +18,8 @@ api_uid = readRegistry("Environment", hive = "HCU")$email_address
 api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
 
+# Get DB table names and IDs from API
+## Get a list of DBs I have access to 
 granted_dbs = GET(
   str_c(
     url,
@@ -88,31 +87,17 @@ memo_data = left_join(
 ) %>% 
   as_tibble() %>% 
   filter(case_status == "Pending PII Approval")
-```
----
-params: 
-  req: `r req`
----
 
-***
-__TO__: Hanseul Kang, Superintendent
+# Output memos
+for(req in 1:nrow(memo_data)) {
+# for(req in sort(memo_data$record_id)[1:3]) {  
+  rmarkdown::render("C:/Users/evan.kramer/Documents/working-with-apis/data_request_memo.Rmd",
+                    output_format = "word_document",
+                    output_file = str_c("DR #", memo_data$record_id[req], " Approval Memo.docx"),
+                    output_dir = "C:/Users/evan.kramer/Downloads/") # change to X:/ drive location
+}
 
-__THROUGH__: Rebecca Lamury, Assistant Superintendent, DAR
-
-__FROM__: Evan Kramer, Director of Research, Analysis, and Reporting, DAR and `r str_replace(memo_data$data_request_manager[req], "@dc.gov", "") %>% str_replace("[.]", " ") %>% str_to_title()`, Data Analysis Manager
-
-__RE__: Requesting Approval for Data Request to be Fulfilled
-
-__DATE__: `r str_c(month(now(), label = T, abbr = F), " ", day(now()), ", ", year(now()))`
-
-***
-
-Please review and let me know if you can approve the following data request fulfillment.
-
-- The data were requested by: `r memo_data$requester_full_name[req]`, `r ifelse(!is.na(memo_data$requesting_organization_final[req]), memo_data$requesting_organization_final[req], ifelse(memo_data$requesting_organization[req] == "Other", memo_data$other_organization[req], memo_data$requesting_organization[req]))`
-- The end recipient of the data is: `r print("recipient")`
-- The data were requested on: `r str_c(month(memo_data$date_created[req]), day(memo_data$date_created[req]), year(memo_data$date_created[req]), sep = "/")`
-- The stated purpose of the data request is: `r memo_data$purpose_of_data_request[req]`
-- The data we propose to release are: `r print("kable")`
-- The data have been prepared by `r str_replace(memo_data$data_request_analyst[req], "@dc.gov", "") %>% str_replace("[.]", " ") %>% str_to_title()` and checked by `r str_replace(memo_data$data_request_qa[req], "@dc.gov", "") %>% str_replace("[.]", " ") %>% str_to_title()`. These people verify that: 
-    - They will transfer data via `r ifelse(!is.na(memo_data$other_data_sharing_mechanism[req]), memo_data$other_data_sharing_mechanism[req], memo_data$data_sharing_mechanism[req])`.
+# Remove files we don't want pushed to GitHub
+if(file.exists("C:/Users/evan.kramer/Documents/working-with-apis/data_request_memo.docx")) {
+  file.remove("C:/Users/evan.kramer/Documents/working-with-apis/data_request_memo.docx")
+}

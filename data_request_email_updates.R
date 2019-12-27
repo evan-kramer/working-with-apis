@@ -1,4 +1,4 @@
-# Testing Smartsheet API
+# Data Request Email Updates
 # Evan Kramer
 
 # Attach packages
@@ -117,7 +117,7 @@ Evan'
 
 ## Loop through all rows
 # for(r in 1:nrow(email_data)) {
-for(r in 1:5) {
+for(r in c(1, 5, 11, 20)) {
   # Adjust body for all rows
   message = str_replace_all(message_template, "<<first_name>>", email_data$first_name[r]) %>% 
     str_replace_all("<<request_id>>", as.character(email_data$request_id[r])) %>% 
