@@ -18,6 +18,11 @@ api_uid = readRegistry("Environment", hive = "HCU")$email_address
 api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
 
+# Feedback from Sara/Rebecca:
+# Add email language: which stages are done and which remain. Like "you are here" in the process. 
+# Perhaps include description of what occurs in that stage
+# Add what they need to do in case of action/information required -- additional requirements gathering?
+
 # Get DB table names and IDs from API
 ## Get a list of DBs I have access to 
 granted_dbs = GET(
@@ -110,6 +115,8 @@ Dear <<first_name>>,
 
 I am writing to update you on the status of request <<request_id>>. This request is listed as <<status>> and was last updated on <<date_modified>>.
 
+<<you_are_here>>
+
 Please reach out with any questions or feedback.
 
 Thanks,
@@ -135,3 +142,5 @@ for(r in c(1, 5, 11, 20)) {
     use_ssl = "force"
   )
 }
+
+# Items that have been stuck in PII approval?

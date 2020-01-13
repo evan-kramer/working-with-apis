@@ -17,6 +17,7 @@ api_pwd = readRegistry("Environment", hive = "HCU")$quickbase_pwd
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
 api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
+req_id = c(2000) # Enter the data request ID here
 
 # Get DB table names and IDs from API
 ## Get a list of DBs I have access to 
@@ -50,6 +51,7 @@ db = tibble(
     db_name_id = str_c(db_name, db_id, sep  = "_")
   ) 
 
+# Connect to Quick Base back end through QuNect
 con = dbConnect(
   odbc(), 
   "QuickBase via QuNect user",
@@ -86,7 +88,7 @@ memo_data = left_join(
   by = c("record_id" = "request_id")
 ) %>% 
   as_tibble() %>% 
-  filter(case_status == "Pending PII Approval")
+  filter(data_request_id %in% req_id)
 
 # Output memos
 for(req in 1:nrow(memo_data)) {
