@@ -11,13 +11,12 @@ library(rvest)
 library(odbc)
 library(DBI)
 library(curl)
-library(blastula)
 api_key = readRegistry("Environment", hive = "HCU")$quickbase_api_key
 api_pwd = readRegistry("Environment", hive = "HCU")$quickbase_pwd
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
 api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
-req_id = c(2000) # Enter the data request ID here
+req_id = c(2000) # Enter the four-digit data request ID here
 
 # Get DB table names and IDs from API
 ## Get a list of DBs I have access to 
@@ -25,7 +24,7 @@ granted_dbs = GET(
   str_c(
     url,
     "?a", "=", "API_GrantedDBs", # API_GrantedDBs function,
-    "&", "usertoken", "=", api_key # use API user key to authenticate (could also use ticket)
+    "&", "usertoken", "=", api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
   )
 ) %>% 
   content()
@@ -92,14 +91,14 @@ memo_data = left_join(
 
 # Output memos
 for(req in 1:nrow(memo_data)) {
-# for(req in sort(memo_data$record_id)[1:3]) {  
+  # for(req in sort(memo_data$record_id)[1:3]) {  
   rmarkdown::render("C:/Users/evan.kramer/Documents/working-with-apis/data_request_memo.Rmd",
                     output_format = "word_document",
                     output_file = str_c("DR #", memo_data$record_id[req], " Approval Memo.docx"),
-                    output_dir = "C:/Users/evan.kramer/Downloads/") # change to X:/ drive location
-}
-
-# Remove files we don't want pushed to GitHub
-if(file.exists("C:/Users/evan.kramer/Documents/working-with-apis/data_request_memo.docx")) {
-  file.remove("C:/Users/evan.kramer/Documents/working-with-apis/data_request_memo.docx")
+                    output_dir = if_else(
+                      memo_data$file_location[req] == "", 
+                      "X:/Analysis Team/Standard Operating Procedures/Orphan Approval Memos",
+                      memo_data$file_location[req]
+                    ) 
+  )
 }
