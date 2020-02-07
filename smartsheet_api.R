@@ -10,6 +10,7 @@ library(rjson)
 library(odbc)
 library(rvest)
 library(xml2)
+library(XML)
 ss_api_key = readRegistry("Environment", hive = "HCU")$smartsheet_api_key
 ss_api_pwd = readRegistry("Environment", hive = "HCU")$smartsheet_pwd
 qb_api_key = readRegistry("Environment", hive = "HCU")$quickbase_api_key
@@ -49,36 +50,70 @@ db = tibble(
   ) 
 
 # Query the API for all new data requests
-new_dr = GET(
-  str_c(
-    str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Requests"]), # database ID
-    "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
-    "&query={'0'.OAF.", month(today() - 7), "/", day(today() - 7), "/", year(today() - 7), "}", # query | field ID, OAF = on or after, date format
-    "&clist=a", # return all columns
-    "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
-  )
+new_dr = left_join(
+  # Get all new requests
+  GET(
+    str_c(
+      str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Requests"]), # database ID
+      "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
+      "&query={'2'.OAF.", month(today() - 7), "/", day(today() - 7), "/", year(today() - 7), "}", # query | field ID, OAF = on or after, date format
+      "AND{'23'.XCT.'Complete'}", # continue query, this appears to be doing nothing
+      "&clist=a", # return all columns
+      "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
+    )
+  ) %>% 
+    content() %>% # parse XML content
+    xmlToDataFrame( # turn into a data frame
+      doc = ., # parsed XML content from above
+      homogeneous = F, # F because not all fields are uniform,filled in
+      nodes = getNodeSet(xmlParse(.), "//record"), # specify the particular nodes in the XML doc to add to the data frame
+      stringsAsFactors = F
+    ),
+  # Join to statuses
+  GET(
+    str_c(
+      str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Status"]), # database ID
+      "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
+      "&query={'0'.OAF.", month(today() - 7), "/", day(today() - 7), "/", year(today() - 7), "}", # query | field ID, OAF = on or after, date format
+      # "AND{'23'.XCT.'Complete'}", # continue query, this appears to be doing nothing
+      "&clist=a", # return all columns
+      "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
+    )
+  ) %>% 
+    content() %>% # parse XML content
+    xmlToDataFrame( # turn into a data frame
+      doc = ., # parsed XML content from above
+      homogeneous = F, # F because not all fields are uniform,filled in
+      nodes = getNodeSet(xmlParse(.), "//record"), # specify the particular nodes in the XML doc to add to the data frame
+      stringsAsFactors = F
+    ) %>% 
+    group_by(request_id_) %>% 
+    arrange(desc(as.numeric(date_modified))) %>% 
+    summarize_at(
+      vars(status, data_request_id, ),
+      "first"
+    ) %>% 
+    ungroup(),
+  by = c("record_id" = "request_id_")
 ) %>% 
-  content()
+  as_tibble() %>% # convert to tidy tibble 
+  arrange(desc(as.numeric(record_id))) %>% 
+  filter(
+    !str_detect(case_status, "Complete")  # Don't add requests that are complete to the tracker
+      
+  ) # %>% transmute()
+  
+  
 
-xml_find_all(new_dr, "//record") %>% 
-  xml_text() %>% 
-  trimws()
-
-## use xml_nodes
-tibble(
-  db_name = xml_nodes(granted_dbs, "record") %>% 
-    str_flatten() %>% 
-    str_split("</dbname><dbname>") %>% 
-    unlist(),
-  db_id = xml_nodes(granted_dbs, "dbid") %>% 
-    str_flatten() %>% 
-    str_split("</dbid><dbid>") %>% 
-    unlist() 
-)
+# Add hyperlink
 
 
+# All requests that are still "New Request Submitted" 
+
+# Requests past due
 
 
+# convert variables to dates
 
 
 # Find last row in Smartsheet
@@ -93,10 +128,11 @@ dr_review = GET(
   )
 ) %>% 
   content(as = "parsed", type = "application/json") 
-dr_review$totalRowCount
 
+# Make sure none of the records are already in the sheet
 
+# Insert values below the last row
 
+# Add hyperlink to data request ID 
 
-
-
+# Add email status updates to this script? Email update to RL/SM?
