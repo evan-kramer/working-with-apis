@@ -11,6 +11,8 @@ library(odbc)
 library(rvest)
 library(xml2)
 library(XML)
+library(jsonlite)
+library(data.table)
 ss_api_key = readRegistry("Environment", hive = "HCU")$smartsheet_api_key
 ss_api_pwd = readRegistry("Environment", hive = "HCU")$smartsheet_pwd
 qb_api_key = readRegistry("Environment", hive = "HCU")$quickbase_api_key
@@ -56,7 +58,8 @@ new_dr = left_join(
     str_c(
       str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Requests"]), # database ID
       "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
-      "&query={'2'.OAF.", month(today() - 7), "/", day(today() - 7), "/", year(today() - 7), "}", # query | field ID, OAF = on or after, date format
+      # "&query={'2'.OAF.", month(today() - 7), "/", day(today() - 7), "/", year(today() - 7), "}", # query | field ID, OAF = on or after, date format
+      "&query={'2'.OAF.", "12/31/", year(today()) -1, "}", # query | field ID, OAF = on or after, date format
       "AND{'23'.XCT.'Complete'}", # continue query, this appears to be doing nothing
       "&clist=a", # return all columns
       "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
@@ -90,7 +93,7 @@ new_dr = left_join(
     group_by(request_id_) %>% 
     arrange(desc(as.numeric(date_modified))) %>% 
     summarize_at(
-      vars(status, data_request_id, ),
+      vars(status, data_request_id),
       "first"
     ) %>% 
     ungroup(),
@@ -99,24 +102,11 @@ new_dr = left_join(
   as_tibble() %>% # convert to tidy tibble 
   arrange(desc(as.numeric(record_id))) %>% 
   filter(
-    !str_detect(case_status, "Complete")  # Don't add requests that are complete to the tracker
-      
-  ) # %>% transmute()
-  
-  
+    !case_status %in% c("Closed", "Complete")  # Don't add requests that are complete to the tracker
+    # case_status %in% c("Closed", "Complete")
+  ) 
 
-# Add hyperlink
-
-
-# All requests that are still "New Request Submitted" 
-
-# Requests past due
-
-
-# convert variables to dates
-
-
-# Find last row in Smartsheet
+# Connect to Smartsheet and pull sheet metadata
 dr_review = GET(
   url = "https://api.smartsheet.com/2.0/sheets/6420298896566148",
   authenticate(
@@ -129,10 +119,116 @@ dr_review = GET(
 ) %>% 
   content(as = "parsed", type = "application/json") 
 
+# Find last row and column in Smartsheet
+last_row = dr_review$totalRowCount
+last_col = length(dr_review$columns)
+
+# Get column information
+col_data = row_names = tibble()
+for(i in 1:last_col) {
+  col_data = tibble(
+    col_name = unlist(dr_review$columns[[i]]["title"]),
+    col_id = unlist(dr_review$columns[[i]]["id"])
+  ) %>% 
+  bind_rows(col_data, .)
+}
+
+# Get a list of all DR IDs currently in the sheet
+dr_review$rows[[last_row]]$id
+dr_review$rows[[last_row]]$rowNumber
+dr_review$rows[[last_row]]$parentId
+dr_review$rows[[last_row]]$siblingId
+dr_review$rows[[last_row]]$expanded
+dr_review$rows[[last_row]]$createdAt
+dr_review$rows[[last_row]]$cells
+
+# dr_review$rows[[last_row]]$cells[[j]]
+
+for(i in 1:last_row) {
+  if(length(dr_review$rows[[i]]$cells) == last_col) {
+    for(j in 1:last_col) {
+      print(i)
+      print(j)
+      print(dr_review$rows[[i]]$cells[[j]]['columnId'])
+      print(dr_review$rows[[i]]$cells[[j]]['value'])
+      print(dr_review$rows[[i]]$cells[[j]]['displayValue'])
+    }
+  }
+}
+
+
+
+# Sandbox
+data = tibble()
+names(tibble) = col_data$col_name
+
+
+row_data = tibble()
+for(i in 1:last_row) {
+  if(length(dr_review$rows[[i]]$cells) == last_col) {
+    for(j in 1:last_col) {
+      row_data = tibble(
+        id = ifelse(is.null(dr_review$rows[[i]]$id), NA, dr_review$rows[[i]]$id),
+        row_number = ifelse(is.null(dr_review$rows[[i]]$rowNumber), NA, dr_review$rows[[i]]$rowNumber),
+        parent_id = ifelse(is.null(dr_review$rows[[i]]$parentId), NA, dr_review$rows[[i]]$parentId),
+        sibling_id = ifelse(is.null(dr_review$rows[[i]]$siblingId), NA, dr_review$rows[[i]]$siblingId),
+        expanded = ifelse(is.null(dr_review$rows[[i]]$expanded), NA, dr_review$rows[[i]]$expanded),
+        created_at = ifelse(is.null(dr_review$rows[[i]]$createdAt), NA, dr_review$rows[[i]]$createdAt),
+        col_id = ifelse(is.null(dr_review$rows[[i]]$cells[[j]]$columnId), NA, dr_review$rows[[i]]$cells[[j]]$columnId),
+        value = ifelse(is.null(dr_review$rows[[i]]$cells[[j]]$value), NA, dr_review$rows[[i]]$cells[[j]]$value),
+        display_value = ifelse(is.null(dr_review$rows[[i]]$cells[[j]]$displayValue), NA, dr_review$rows[[i]]$cells[[j]]$displayValue)
+      ) %>%
+        bind_rows(row_data, .)
+    }
+  }
+}
+row_data
+
+
+
+for(i in 1:last_row) {
+  if(length(dr_review$rows[[i]]$cells) == last_col) {
+    for(j in 1:last_col) {
+      row_data = tibble(
+        col_id = unlist(dr_review$rows[[i]]$cells[[j]]["columnId"]),
+        value = unlist(dr_review$rows[[i]]$cells[[j]]["value"]),
+        display_value = unlist(dr_review$rows[[i]]$cells[[j]]["displayValue"]),
+      ) %>% 
+        bind_rows(row_data, .)
+    }
+  }
+}
+
+# Sandbox
+for(i in 1:last_row) {
+  if(length(dr_review$rows[[i]][["cells"]]) == last_col) {
+    for(i in 1:last_col) {
+      print(dr_review$rows[[i]][["cells"]][i])
+    }
+  }
+}
+
+
+
+# Test to see what is already there
+GET(
+  url = str_c("https://api.smartsheet.com/2.0/sheets/6420298896566148/rows", ),
+  authenticate(
+    user = api_uid,
+    password = ss_api_pwd
+  ),
+  add_headers(
+    Authorization = str_c("Bearer ", ss_api_key)
+  )
+) %>% 
+  content(as = "parsed", type = "application/json") 
+
+# Determine whether the DR IDs are not already in the sheet
+# Add hyperlink
+# Follow up on all requests that are still "New Request Submitted" 
+# Follow up on requests that are past due?
+# Convert variables to dates
 # Make sure none of the records are already in the sheet
-
 # Insert values below the last row
-
 # Add hyperlink to data request ID 
-
-# Add email status updates to this script? Email update to RL/SM?
+# Add email status updates to this script? Email update to RL/SM? from data_request_email_updates
