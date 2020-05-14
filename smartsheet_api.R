@@ -51,6 +51,30 @@ db = tibble(
     db_name_id = str_c(db_name, db_id, sep  = "_")
   ) 
 
+# Data requests within the last X days
+for(d in 1:7) {
+  print(str_c("Number of data requests in the past ", d, " days..."))
+  GET(
+    str_c(
+      str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Requests"]), # database ID
+      "?a", "=", "API_DoQueryCount", # call API_DoQuery function or API_GenResultsTable function
+      "&query={'2'.OAF.", month(now()), "/", day(now()) - d, "/", year(now()), "}", # query | field ID, OAF = on or after, date format
+      # "AND{'23'.XCT.'Complete'}", # continue query, this appears to be doing nothing
+      # "&clist=a", # return all columns
+      "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
+    )
+  ) %>% 
+    content() %>% # parse XML content
+    xmlToDataFrame( # turn into a data frame
+      doc = ., # parsed XML content from above
+      homogeneous = F, # F because not all fields are uniform,filled in
+      nodes = getNodeSet(xmlParse(.), "//record"), # specify the particular nodes in the XML doc to add to the data frame
+      stringsAsFactors = F
+    ) %>% 
+    as_tibble() %>% 
+    print()
+} 
+
 # Query the API for all new data requests
 new_dr = left_join(
   # Get all new requests
@@ -59,7 +83,7 @@ new_dr = left_join(
       str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Requests"]), # database ID
       "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
       # "&query={'2'.OAF.", month(today() - 7), "/", day(today() - 7), "/", year(today() - 7), "}", # query | field ID, OAF = on or after, date format
-      "&query={'2'.OAF.", "12/31/", year(today()) -1, "}", # query | field ID, OAF = on or after, date format
+      "&query={'2'.OAF.", "12/31/", year(today()) - 1, "}", # query | field ID, OAF = on or after, date format
       "AND{'23'.XCT.'Complete'}", # continue query, this appears to be doing nothing
       "&clist=a", # return all columns
       "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable

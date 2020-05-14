@@ -51,7 +51,6 @@ db = tibble(
     db_name_id = str_c(db_name, db_id, sep  = "_")
   ) 
 
-
 # Data 
 (data = left_join(
   # Get all new requests
