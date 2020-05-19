@@ -21,40 +21,54 @@ qb_api_app = readRegistry("Environment", hive = "HCU")$quickbase_api_token
 qb_url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
 
-# Send a list of new data requests to Smartsheet Front Office review sheet? 
 # Get DBs to which I have access
-granted_dbs = GET(
+dbs = GET(
   str_c(
     qb_url,
     "?a", "=", "API_GrantedDBs", # API_GrantedDBs function,
     "&", "usertoken", "=", qb_api_key # use API user key to authenticate (could also use ticket)
   )
 ) %>% 
-  content()
-db = tibble(
-  db_name = xml_nodes(granted_dbs, "dbname") %>% 
-    str_flatten() %>% 
-    str_split("</dbname><dbname>") %>% 
-    unlist(),
-  db_id = xml_nodes(granted_dbs, "dbid") %>% 
-    str_flatten() %>% 
-    str_split("</dbid><dbid>") %>% 
-    unlist() 
-) %>% 
-  # Concatenate to match QuNect naming conventions
-  mutate(
-    db_name = str_replace_all(db_name, "</dbname>", "") %>% 
-      str_replace_all("<dbname>", "") %>% 
-      str_replace_all("[ :]", "_"),
-    db_id = str_replace_all(db_id, "</dbid>", "") %>% 
-      str_replace_all("<dbid>", ""),
-    db_name_id = str_c(db_name, db_id, sep  = "_")
-  ) 
+  content() %>% 
+  xmlToDataFrame( # turn into a data frame
+    doc = ., # parsed XML content from above
+    homogeneous = F, # F because not all fields are uniform,filled in
+    nodes = getNodeSet(xmlParse(.), "//dbinfo"), # specify the particular nodes in the XML doc to add to the data frame
+    stringsAsFactors = F
+  ) %>% 
+  as_tibble() %>% 
+  mutate(numRecords = NA_integer_, lastRecModTime = NA_integer_)
+  
+# Get info for all databases
+for(d in dbs$dbid) {
+  # Call API (API_GetDBInfo)
+  response = GET(
+    str_c(
+      str_replace(qb_url, "main", d), # database ID
+      "?a", "=", "API_GetDBInfo", 
+      "&", "usertoken", "=", qb_api_key
+    )
+  ) %>% 
+    read_xml() 
+  # Replace missing values in tibble above
+  for(d2 in c("numRecords", "lastRecModTime")) {
+    dbs[dbs$dbid == d, d2] = xml_find_all(response, str_c("//", d2)) %>% 
+      xml_contents() %>% 
+      as.character() %>% 
+      as.numeric() 
+  }
+}
 
-# Sandbox
+# Clean up dates
+dbs = mutate(dbs, lastRecModTime = as.POSIXct(lastRecModTime / 1000, origin = "1970-01-01"))
+
+
+break
+
+# Query database
 GET(
   str_c(
-    str_replace(qb_url, "main", db$db_id[db$db_name == "OSSE_Data_Request_Portal__Requests"]), # database ID
+    
     "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
     "&query={'2'.OAF.'Tue, 18 May 2020 19:45:24 GMT'}",
     # "&query={'10'.CT.'Urban'}", # query | field ID, OAF = on or after, date format
@@ -70,9 +84,6 @@ GET(
     stringsAsFactors = F
   ) %>% 
   as_tibble()
-
-
-
 
 # Data requests within the last X days
 for(d in 1:10) {
