@@ -63,26 +63,31 @@ for(d in dbs$dbid) {
 dbs = mutate(dbs, lastRecModTime = as.POSIXct(lastRecModTime / 1000, origin = "1970-01-01"))
 
 # Query database for all requests in the last X days
-GET(
-  str_c(
-    "?a", "=", "API_DoQuery", # call API_DoQuery function or API_GenResultsTable function
-    "&query={'2'.OAF.", as.numeric(now() - days(1)), "}",
-    "&clist=a", # return all columns
-    "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
-  )
-) %>% 
-  content() %>% # parse XML content
-  xmlToDataFrame( # turn into a data frame
-    doc = ., # parsed XML content from above
-    homogeneous = F, # F because not all fields are uniform,filled in
-    nodes = getNodeSet(xmlParse(.), "//record"), # specify the particular nodes in the XML doc to add to the data frame
-    stringsAsFactors = F
+for(d in 10:1) {
+  new_requests = GET(
+    str_c(
+      str_replace(qb_url, "main", "bm6u3xrcx"), # database ID
+      "?a", "=", "API_DoQuery", # call API_DoQuery function
+      "&query={'2'.IR.'last+", d, "+d'}", # All requests in the last X days
+      # "&query={'2'.IR.yesterday}",
+      "&clist=a", # return all columns
+      "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
+    )
   ) %>% 
-  as_tibble()
+    content() %>% # parse XML content
+    xmlToDataFrame( # turn into a data frame
+      doc = ., # parsed XML content from above
+      homogeneous = F, # F because not all fields are uniform,filled in
+      nodes = getNodeSet(xmlParse(.), "//record"), # specify the particular nodes in the XML doc to add to the data frame
+      stringsAsFactors = F
+    ) %>% 
+    as_tibble() 
+} 
 
 # Connect to Smartsheet and pull sheet metadata
-dr_review = GET(
-  url = "https://api.smartsheet.com/2.0/sheets/6420298896566148",
+drs = GET(
+  # url = "https://api.smartsheet.com/2.0/sheets/1774666982418308", # File > Properties > Sheet ID
+  url = "https://api.smartsheet.com/2.0/sheets/1998748848023428", # Sandbox
   authenticate(
     user = api_uid,
     password = ss_api_pwd
@@ -93,30 +98,114 @@ dr_review = GET(
 ) %>% 
   content(as = "parsed", type = "application/json") 
 
+# Will need to unnest significantly
+# Try adding a new example row
+body = 
+  '[{
+    "toBottom": true, 
+    "cells":
+      [
+        {"columnId": 434763312981892, "value": "Example DR #"},
+        {"columnId": 8597537637590916, "value": "Example Work Stream"},
+        {"columnId": 4282710412814212, "value": "https://google.com"}
+      ]
+  }]'
+
+# Loop through all new requests
+# Add parent row
+for(r in 1:nrow(new_requests)) {
+  # Add parent row
+  parent_post = POST(
+    url = "https://api.smartsheet.com/2.0/sheets/1998748848023428/rows", # Sandbox,
+    authenticate(user = api_uid, password = ss_api_pwd),
+    add_headers(Authorization = str_c("Bearer ", ss_api_key)),
+    # add_headers(Content-Type = "application/json"),
+    encode = "json", 
+    body = str_replace_all(
+      body, 
+      "Example DR #", 
+      str_c("DR #", new_requests$data_request_id[r])
+    ) 
+  )
+  
+  # Parent response
+  parent_response = tibble(
+    id = content(parent_post)$result[[1]]$id,
+    sheetId = content(parent_post)$result[[1]]$sheetId,
+    rowNumber = content(parent_post)$result[[1]]$rowNumber,
+    siblingId = content(parent_post)$result[[1]]$siblingId
+  )
+  
+  # Child rows
+  for(t in c("Request received", "Draft specifications according to business rules",
+             "QA", "Finalize analysis and complete memo and business rules", 
+             "Manager review and submit for approval", "Send data to requester")) {
+    # Add child rows
+    child_post = POST(
+      url = "https://api.smartsheet.com/2.0/sheets/1998748848023428/rows", # Sandbox,
+      authenticate(user = api_uid, password = ss_api_pwd),
+      add_headers(Authorization = str_c("Bearer ", ss_api_key)),
+      # add_headers(Content-Type = "application/json"),
+      encode = "json", 
+      body = str_replace_all(
+        body, 
+        "Example DR #", 
+        t
+      )
+    )
+    
+    # Child response
+    child_response = tibble(
+      id = content(child_post)$result[[1]]$id,
+      sheetId = content(child_post)$result[[1]]$sheetId,
+      rowNumber = content(child_post)$result[[1]]$rowNumber,
+      siblingId = content(child_post)$result[[1]]$siblingId
+    )
+    
+    # Indent child rows
+    PUT(
+      url = "https://api.smartsheet.com/2.0/sheets/1998748848023428/rows", # Sandbox,
+      authenticate(user = api_uid, password = ss_api_pwd),
+      add_headers(Authorization = str_c("Bearer ", ss_api_key)),
+      # add_headers(Content-Type = "application/json"),
+      encode = "json", 
+      body = str_c(
+        '[{
+            "indent":1,
+            "id": ', child_response$id, ' 
+        }]'
+      )
+    )
+  }
+}
+
+break
+
 # Find last row and column in Smartsheet
-last_row = dr_review$totalRowCount
-last_col = length(dr_review$columns)
+drs$totalRowCount == length(drs$rows)
+length(drs$columns)
+drs$columns
+drs$rows
 
 # Get column information
 col_data = row_names = tibble()
-for(i in 1:last_col) {
+for(i in 1:length(drs$columns)) {
   col_data = tibble(
-    col_name = unlist(dr_review$columns[[i]]["title"]),
-    col_id = unlist(dr_review$columns[[i]]["id"])
+    col_name = unlist(drs$columns[[i]]["title"]),
+    col_id = unlist(drs$columns[[i]]["id"])
   ) %>% 
   bind_rows(col_data, .)
 }
 
-# Get a list of all DR IDs currently in the sheet
-dr_review$rows[[last_row]]$id
-dr_review$rows[[last_row]]$rowNumber
-dr_review$rows[[last_row]]$parentId
-dr_review$rows[[last_row]]$siblingId
-dr_review$rows[[last_row]]$expanded
-dr_review$rows[[last_row]]$createdAt
-dr_review$rows[[last_row]]$cells
-
-# dr_review$rows[[last_row]]$cells[[j]]
+# Get row information
+row_data = tibble()
+for(i in 1:length(drs$rows)) {
+  row_data = tibble(
+    row_id = unlist(drs$rows[[i]]["id"]),
+    row_value = unlist(drs$rows[[i]]["value"])
+  ) %>% 
+    bind_row(row_data, .)
+}
 
 for(i in 1:last_row) {
   if(length(dr_review$rows[[i]]$cells) == last_col) {
@@ -130,12 +219,9 @@ for(i in 1:last_row) {
   }
 }
 
-
-
 # Sandbox
 data = tibble()
 names(tibble) = col_data$col_name
-
 
 row_data = tibble()
 for(i in 1:last_row) {
@@ -157,52 +243,3 @@ for(i in 1:last_row) {
   }
 }
 row_data
-
-
-
-for(i in 1:last_row) {
-  if(length(dr_review$rows[[i]]$cells) == last_col) {
-    for(j in 1:last_col) {
-      row_data = tibble(
-        col_id = unlist(dr_review$rows[[i]]$cells[[j]]["columnId"]),
-        value = unlist(dr_review$rows[[i]]$cells[[j]]["value"]),
-        display_value = unlist(dr_review$rows[[i]]$cells[[j]]["displayValue"]),
-      ) %>% 
-        bind_rows(row_data, .)
-    }
-  }
-}
-
-# Sandbox
-for(i in 1:last_row) {
-  if(length(dr_review$rows[[i]][["cells"]]) == last_col) {
-    for(i in 1:last_col) {
-      print(dr_review$rows[[i]][["cells"]][i])
-    }
-  }
-}
-
-
-
-# Test to see what is already there
-GET(
-  url = str_c("https://api.smartsheet.com/2.0/sheets/6420298896566148/rows", ),
-  authenticate(
-    user = api_uid,
-    password = ss_api_pwd
-  ),
-  add_headers(
-    Authorization = str_c("Bearer ", ss_api_key)
-  )
-) %>% 
-  content(as = "parsed", type = "application/json") 
-
-# Determine whether the DR IDs are not already in the sheet
-# Add hyperlink
-# Follow up on all requests that are still "New Request Submitted" 
-# Follow up on requests that are past due?
-# Convert variables to dates
-# Make sure none of the records are already in the sheet
-# Insert values below the last row
-# Add hyperlink to data request ID 
-# Add email status updates to this script? Email update to RL/SM? from data_request_email_updates
