@@ -3,7 +3,7 @@
 
 # Attach packages
 options(java.parameters = "-Xmx16G")
-library(tidyverse)
+# library(tidyverse)
 
 # Create function
 source_all = function(dir, files, ...) {
