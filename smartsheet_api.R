@@ -22,16 +22,6 @@ qb_url = readRegistry("Environment", hive = "HCU")$quickbase_api_url
 api_uid = readRegistry("Environment", hive = "HCU")$email_address
 
 # Get DBs to which I have access
-GET(
-  str_c(
-    qb_url,
-    "?a=APIGrantedDBs",
-    "&usertoken=b4y7fe_t6n_chk6hpfp7q23icrf3kyxxy267m"
-  )
-) %>% 
-  content()
-
-
 dbs = GET(
   str_c(
     qb_url,
