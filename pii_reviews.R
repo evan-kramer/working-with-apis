@@ -41,52 +41,27 @@ dbs = GET(
   content() %>% 
   xmlToDataFrame( # turn into a data frame
     doc = ., # parsed XML content from above
-    homogeneous = F, # F because not all fields are uniform,filled in
+    homogeneous = F, # F because not all fields are uniform, filled in
     nodes = getNodeSet(xmlParse(.), "//dbinfo"), # specify the particular nodes in the XML doc to add to the data frame
     stringsAsFactors = F
   ) %>% 
-  as_tibble() %>% 
-  mutate(numRecords = NA_integer_, lastRecModTime = NA_integer_)
-  
-# Get info for all databases
-for(d in dbs$dbid) {
-  # Call API (API_GetDBInfo)
-  response = GET(
-    str_c(
-      str_replace(qb_url, "main", d), # database ID
-      "?a", "=", "API_GetDBInfo", 
-      "&", "usertoken", "=", qb_api_key
-    )
-  ) %>% 
-    read_xml() 
-  # Replace missing values in tibble above
-  for(d2 in c("numRecords", "lastRecModTime")) {
-    dbs[dbs$dbid == d, d2] = xml_find_all(response, str_c("//", d2)) %>% 
-      xml_contents() %>% 
-      as.character() %>% 
-      as.numeric() 
-  }
-}
-
-# Clean up dates
-dbs = mutate(dbs, lastRecModTime = as.POSIXct(lastRecModTime / 1000, origin = "1970-01-01"))
+  as_tibble() 
 
 # Query database for all requests in Pending PII review status
 pii_reviews = GET(
   str_c(
-    str_replace(qb_url, "main", dbs$dbid[str_detect(dbs$dbname, "Status")]), # database ID
-    "?a", "=", "API_DoQuery", # call API_DoQuery function
-    "&query={'2'.IR.'this+y'}", # All requests in the last X days
-    # "&query={'2'.IR.yesterday}",
-    "&clist=a", # return all columns
-    "&", "usertoken", "=", qb_api_key # use API user key to authenticate; users need to create in Quick Base and store as environment variable
+    str_replace(qb_url, "main", dbs$dbid[str_detect(dbs$dbname, "Status")]), 
+    "?a", "=", "API_DoQuery", 
+    "&query={'2'.IR.'this+y'}", 
+    "&clist=a", 
+    "&", "usertoken", "=", qb_api_key 
   )
 ) %>% 
-  content() %>% # parse XML content
-  xmlToDataFrame( # turn into a data frame
-    doc = ., # parsed XML content from above
-    homogeneous = F, # F because not all fields are uniform,filled in
-    nodes = getNodeSet(xmlParse(.), "//record"), # specify the particular nodes in the XML doc to add to the data frame
+  content() %>% 
+  xmlToDataFrame(
+    doc = ., 
+    homogeneous = F, 
+    nodes = getNodeSet(xmlParse(.), "//record"), 
     stringsAsFactors = F
   ) %>% 
   as_tibble() %>% 
