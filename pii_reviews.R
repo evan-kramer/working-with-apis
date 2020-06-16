@@ -1,6 +1,13 @@
 # PII Reviews
 # Evan Kramer
 
+# Download R: https://mirrors.nics.utk.edu/cran/
+# Download RStudio: https://rstudio.com/products/rstudio/download/#download
+# Create a Smartsheet API key: https://www.loom.com/share/0cba648be36c401d9f55429d10433f5a
+# Create a QB API key: Account > My Preferences > Manage user tokens for OCTO realm... > + New user token > Name > Assign to DRT and DRMOA > Copy key
+# Store in local environment variables: Start menu > Edit system environment variables > Environment variables > New > Give name and value
+# You'll have to edit here when you update your QB and SS passwords
+
 # Attach packages
 options(java.parameters = "-Xmx16G")
 installed_packages = as.data.frame(installed.packages())
@@ -13,13 +20,6 @@ for(p in required_packages) {
   library(p, character.only = T)
 }
 rm(list = ls(pattern = "_packages"))
-
-# Download R: https://mirrors.nics.utk.edu/cran/
-# Download RStudio: https://rstudio.com/products/rstudio/download/#download
-# Create a Smartsheet API key: https://www.loom.com/share/0cba648be36c401d9f55429d10433f5a
-# Create a QB API key: Account > My Preferences > Manage user tokens for OCTO realm... > + New user token > Name > Assign to DRT and DRMOA > Copy key
-# Store in local environment variables: Start menu > Edit system environment variables > Environment variables > New > Give name and value
-# You'll have to edit here when you update your QB and SS passwords
 
 # Credentials
 ss_api_key = readRegistry("Environment", hive = "HCU")$smartsheet_api_key
